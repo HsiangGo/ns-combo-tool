@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>組合圖產生器 — 多商品版（自動去背）</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#222;
+    display:flex;flex-direction:column;align-items:center;padding:20px;gap:16px;}
+  h1{font-size:22px;font-weight:900;}
+  h1 small{font-size:13px;font-weight:600;color:#888;margin-left:8px;}
+  .wrap{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap;justify-content:center;}
+  .stageBox{position:relative;}
+  #stage{width:500px;height:500px;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.15);
+    cursor:grab;touch-action:none;
+    background-image:linear-gradient(45deg,#e3e6ea 25%,transparent 25%),linear-gradient(-45deg,#e3e6ea 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#e3e6ea 75%),linear-gradient(-45deg,transparent 75%,#e3e6ea 75%);
+    background-size:24px 24px;background-position:0 0,0 12px,12px -12px,-12px 0;}
+  #stage.drag{cursor:grabbing;}
+  .dropHint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;color:#9aa1ac;font-size:16px;font-weight:700;text-align:center;line-height:1.6;}
+  .panel{width:320px;display:flex;flex-direction:column;gap:14px;}
+  .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.06);}
+  .card h3{font-size:14px;font-weight:800;margin-bottom:10px;}
+  .upbtn{width:100%;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;border:2px dashed #cfd4dc;
+    background:#f8f9fb;color:#555;border-radius:8px;padding:12px;text-align:center;}
+  .upbtn:hover{border-color:#E60012;color:#E60012;}
+  /* 商品清單 */
+  .list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
+  .item{display:flex;align-items:center;gap:8px;background:#f7f8fa;border-radius:8px;padding:6px;}
+  .item.cur{outline:2px solid #E60012;}
+  .item canvas{width:40px;height:40px;background:#fff;border-radius:5px;object-fit:contain;flex:none;
+    background-image:linear-gradient(45deg,#eceef1 25%,transparent 25%),linear-gradient(-45deg,#eceef1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eceef1 75%),linear-gradient(-45deg,transparent 75%,#eceef1 75%);background-size:10px 10px;}
+  .item .nm{flex:1;font-size:12px;font-weight:700;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .item button{border:none;background:#e6e9ee;color:#444;font-weight:800;cursor:pointer;border-radius:6px;width:26px;height:26px;font-size:13px;}
+  .item button.del{background:#ffe5e7;color:#E60012;}
+  .row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#444;margin-top:8px;}
+  .row input[type=range]{flex:1;accent-color:#E60012;}
+  .seg{display:flex;gap:6px;}
+  .seg button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none;border-radius:8px;padding:8px 10px;background:#eef0f3;color:#333;}
+  .seg button.on{background:#E60012;color:#fff;}
+  .act{display:flex;flex-direction:column;gap:8px;}
+  .act .dlbtn{background:#E60012;color:#fff;font-size:15px;padding:13px;border:none;border-radius:8px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(230,0,18,.3);}
+  .act .ghost{background:#222;color:#fff;font-size:14px;padding:11px;border:none;border-radius:8px;font-weight:700;cursor:pointer;}
+  .tipline{font-size:12px;color:#9098a3;line-height:1.6;margin-top:8px;}
+  .sel{font-size:12px;color:#E60012;font-weight:800;}
+  .badgeNew{background:#ff8a00;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;margin-left:6px;}
+</style>
+</head>
+<body>
+  <h1>組合圖產生器 <small>多商品 → 自動去背 → 自動排版 → 下載 PNG（1000×1000）</small></h1>
+
+  <div class="wrap">
+    <div class="stageBox">
+      <canvas id="stage" width="1000" height="1000"></canvas>
+      <div class="dropHint" id="hint">把商品圖拖進來（可一次多張）<br>白底商品照即可，會自動去背</div>
+    </div>
+
+    <div class="panel">
+      <div class="card">
+        <h3>① 加入商品（可多個）</h3>
+        <label class="upbtn" id="add">＋ 選擇圖片（可多選）/ 或拖入畫布</label>
+        <input type="file" id="file" accept="image/*" multiple hidden>
+        <div class="list" id="list"></div>
+        <div class="tipline">想加幾個就加幾個；清單可刪除 ✕、上下調整堆疊順序。</div>
+      </div>
+
+      <div class="card">
+        <h3>② 自動去背 <span class="badgeNew">NEW</span></h3>
+        <div class="row"><label><input type="checkbox" id="bgrm" checked> 去掉白底（變透明）</label></div>
+        <div class="row">強度<input type="range" id="tol" min="5" max="80" value="34"></div>
+        <div class="tipline">白底商品照效果最好。殘留白邊→調高；商品破洞→調低。</div>
+      </div>
+
+      <div class="card">
+        <h3>③ 排版</h3>
+        <div class="seg" id="modeSeg">
+          <button data-m="row" class="on">一排（等高）</button>
+          <button data-m="grid">網格</button>
+        </div>
+        <div class="row">選取的圖 縮放<input type="range" id="scale" min="10" max="300" value="100"></div>
+        <span class="sel" id="selName">（點畫布上的圖選取）</span>
+        <div class="tipline">拖曳畫布上的圖可移動；滾輪縮放選取的圖。</div>
+      </div>
+
+      <div class="card">
+        <h3>④ 背景</h3>
+        <div class="seg" id="bgSeg">
+          <button data-bg="transparent" class="on">透明</button>
+          <button data-bg="#ffffff">白底</button>
+          <button data-bg="#f4f4f6">淺灰</button>
+        </div>
+        <div class="row"><label><input type="checkbox" id="shadow" checked> 加柔和陰影</label></div>
+      </div>
+
+      <div class="act">
+        <button class="dlbtn" id="dl">⬇ 下載組合圖 PNG</button>
+        <button class="ghost" id="reset">重新自動排版</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const cv=document.getElementById('stage'),ctx=cv.getContext('2d'),W=1000,H=1000;
+const hint=document.getElementById('hint'),selName=document.getElementById('selName'),listEl=document.getElementById('list');
+let bg='transparent',shadow=true,sel=-1,bgRemove=true,tol=34,mode='row';
+let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name}
+
+// ===== 自動去背：四角洪水填充 =====
+function process(L){
+  const img=L.src;if(!img)return;
+  const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+  const x=c.getContext('2d');x.drawImage(img,0,0);
+  if(bgRemove){
+    const w=c.width,h=c.height,d=x.getImageData(0,0,w,h),p=d.data;
+    const visited=new Uint8Array(w*h),stack=[];
+    let rr=0,gg=0,bb=0;const cor=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
+    cor.forEach(([cx,cy])=>{const o=(cy*w+cx)*4;rr+=p[o];gg+=p[o+1];bb+=p[o+2];});rr/=4;gg/=4;bb/=4;
+    const t=Math.pow(tol*3.1,2);
+    function push(cx,cy){if(cx<0||cy<0||cx>=w||cy>=h)return;const i=cy*w+cx;if(visited[i])return;visited[i]=1;stack.push(i);}
+    cor.forEach(([cx,cy])=>push(cx,cy));
+    while(stack.length){const i=stack.pop(),o=i*4;
+      const dr=p[o]-rr,dg=p[o+1]-gg,db=p[o+2]-bb;
+      if(dr*dr+dg*dg+db*db>t)continue;
+      p[o+3]=0;const cx=i%w,cy=(i/w)|0;
+      push(cx+1,cy);push(cx-1,cy);push(cx,cy+1);push(cx,cy-1);}
+    x.putImageData(d,0,0);
+  }
+  L.pc=c;
+}
+
+function fitScale(L){return Math.min(L.box.w/L.bw,L.box.h/L.bh)||1;}
+
+// ===== 自動排版 =====
+function autoLayout(){
+  const n=layers.length;if(!n)return;
+  if(mode==='row'){
+    const pad=70,gap0=44,H0=Math.min(560,H-pad*2),avail=W-pad*2;
+    let ws=layers.map(L=>L.bh?L.bw*(H0/L.bh):0);
+    let total=ws.reduce((a,b)=>a+b,0)+gap0*(n-1);
+    const k=total>avail?avail/total:1,h=H0*k,gap=gap0*k;
+    ws=ws.map(w=>w*k);
+    const rowW=ws.reduce((a,b)=>a+b,0)+gap*(n-1);let x=(W-rowW)/2;
+    layers.forEach((L,i)=>{const w=ws[i];L.box={w,h};L.scale=L.bw?w/L.bw:1;L.x=x+w/2;L.y=H/2;x+=w+gap;});
+  }else{
+    const cols=n<=3?n:Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols),pad=64;
+    const cellW=(W-pad*2)/cols,cellH=(H-pad*2)/rows;
+    layers.forEach((L,i)=>{const r=Math.floor(i/cols),c=i%cols;
+      L.box={w:cellW*0.84,h:cellH*0.84};L.scale=fitScale(L);
+      L.x=pad+cellW*(c+0.5);L.y=pad+cellH*(r+0.5);});
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  if(bg!=='transparent'){ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);}
+  layers.forEach((L,i)=>{
+    if(!L.pc)return;const w=L.bw*L.scale,h=L.bh*L.scale;
+    ctx.save();if(shadow){ctx.shadowColor='rgba(0,0,0,.22)';ctx.shadowBlur=26;ctx.shadowOffsetY=14;}
+    ctx.drawImage(L.pc,L.x-w/2,L.y-h/2,w,h);ctx.restore();
+    if(i===sel){ctx.save();ctx.strokeStyle='#E60012';ctx.setLineDash([10,8]);ctx.lineWidth=3;
+      ctx.strokeRect(L.x-w/2,L.y-h/2,w,h);ctx.restore();}
+  });
+  hint.style.display=layers.length?'none':'flex';
+}
+
+function reprocessAll(){layers.forEach(process);draw();buildList();}
+
+function buildList(){
+  listEl.innerHTML='';
+  layers.forEach((L,i)=>{
+    const it=document.createElement('div');it.className='item'+(i===sel?' cur':'');
+    const mini=document.createElement('canvas');mini.width=mini.height=40;
+    const mx=mini.getContext('2d');if(L.pc){const s=Math.min(40/L.bw,40/L.bh),w=L.bw*s,h=L.bh*s;
+      mx.drawImage(L.pc,(40-w)/2,(40-h)/2,w,h);}
+    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品');
+    const up=document.createElement('button');up.textContent='▲';up.title='上移';up.onclick=()=>move(i,-1);
+    const dn=document.createElement('button');dn.textContent='▼';dn.title='下移';dn.onclick=()=>move(i,1);
+    const del=document.createElement('button');del.className='del';del.textContent='✕';del.onclick=()=>remove(i);
+    it.append(mini,nm,up,dn,del);
+    it.onclick=e=>{if(e.target.tagName==='BUTTON')return;sel=i;selName.textContent='（'+(L.name||'商品')+'）';
+      document.getElementById('scale').value=Math.round(L.scale/fitScale(L)*100);draw();buildList();};
+    listEl.appendChild(it);
+  });
+}
+function move(i,d){const j=i+d;if(j<0||j>=layers.length)return;
+  [layers[i],layers[j]]=[layers[j],layers[i]];if(sel===i)sel=j;else if(sel===j)sel=i;
+  autoLayout();draw();buildList();}
+function remove(i){layers.splice(i,1);sel=-1;selName.textContent='（點畫布上的圖選取）';
+  autoLayout();draw();buildList();}
+
+function addFile(file){
+  if(!file||!file.type.startsWith('image/'))return;
+  const r=new FileReader();
+  r.onload=e=>{const im=new Image();im.onload=()=>{
+    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,'')};
+    process(L);layers.push(L);autoLayout();draw();buildList();
+  };im.src=e.target.result;};
+  r.readAsDataURL(file);
+}
+
+document.getElementById('add').onclick=()=>document.getElementById('file').click();
+document.getElementById('file').addEventListener('change',e=>{[...e.target.files].forEach(addFile);e.target.value='';});
+['dragover','dragenter'].forEach(ev=>cv.addEventListener(ev,e=>e.preventDefault()));
+cv.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/')).forEach(addFile);});
+
+function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height};}
+function hit(p){for(let i=layers.length-1;i>=0;i--){const L=layers[i];if(!L.pc)continue;
+  const w=L.bw*L.scale,h=L.bh*L.scale;
+  if(p.x>=L.x-w/2&&p.x<=L.x+w/2&&p.y>=L.y-h/2&&p.y<=L.y+h/2)return i;}return -1;}
+let drag=false,off={x:0,y:0};
+cv.addEventListener('pointerdown',e=>{const p=pt(e),i=hit(p);sel=i;
+  if(i>=0){drag=true;cv.classList.add('drag');cv.setPointerCapture(e.pointerId);
+    off={x:p.x-layers[i].x,y:p.y-layers[i].y};
+    document.getElementById('scale').value=Math.round(layers[i].scale/fitScale(layers[i])*100);
+    selName.textContent='（'+(layers[i].name||'商品')+'）';}
+  else selName.textContent='（點畫布上的圖選取）';draw();buildList();});
+cv.addEventListener('pointermove',e=>{if(!drag||sel<0)return;const p=pt(e);
+  layers[sel].x=p.x-off.x;layers[sel].y=p.y-off.y;draw();});
+cv.addEventListener('pointerup',()=>{drag=false;cv.classList.remove('drag');});
+cv.addEventListener('wheel',e=>{if(sel<0)return;e.preventDefault();
+  layers[sel].scale*=e.deltaY<0?1.06:0.94;
+  document.getElementById('scale').value=Math.round(layers[sel].scale/fitScale(layers[sel])*100);draw();},{passive:false});
+
+document.getElementById('scale').addEventListener('input',e=>{if(sel<0)return;
+  layers[sel].scale=fitScale(layers[sel])*(e.target.value/100);draw();});
+document.getElementById('bgrm').addEventListener('change',e=>{bgRemove=e.target.checked;reprocessAll();});
+let tt;document.getElementById('tol').addEventListener('input',e=>{tol=+e.target.value;clearTimeout(tt);tt=setTimeout(reprocessAll,120);});
+document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  mode=b.dataset.m;autoLayout();draw();});
+document.querySelectorAll('#bgSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#bgSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');bg=b.dataset.bg;draw();});
+document.getElementById('shadow').addEventListener('change',e=>{shadow=e.target.checked;draw();});
+document.getElementById('reset').onclick=()=>{autoLayout();sel=-1;selName.textContent='（點畫布上的圖選取）';draw();buildList();};
+document.getElementById('dl').onclick=()=>{const tmp=sel;sel=-1;draw();
+  const a=document.createElement('a');a.download='組合圖_1000x1000.png';a.href=cv.toDataURL('image/png');a.click();sel=tmp;draw();};
+
+draw();
+</script>
+</body>
+</html>
