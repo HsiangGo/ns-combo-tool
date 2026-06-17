@@ -70,10 +70,14 @@
       </div>
 
       <div class="card">
-        <h3>② 自動去背 <span class="badgeNew">NEW</span></h3>
-        <div class="row"><label><input type="checkbox" id="bgrm" checked> 去掉白底（變透明）</label></div>
-        <div class="row">強度<input type="range" id="tol" min="5" max="80" value="34"></div>
-        <div class="tipline">白底商品照效果最好。殘留白邊→調高；商品破洞→調低。</div>
+        <h3>② 去背 <span class="badgeNew">AI</span></h3>
+        <div class="seg" id="rmSeg">
+          <button data-r="fast" class="on">快速去白底</button>
+          <button data-r="ai">✨ AI 精準</button>
+          <button data-r="off">不去背</button>
+        </div>
+        <div class="row" id="tolRow">強度<input type="range" id="tol" min="5" max="80" value="34"></div>
+        <div class="tipline" id="rmStatus">快速：白底照秒去背。AI：任何背景都乾淨，首次需下載模型（約十幾 MB），每張處理數秒。圖片不會上傳。</div>
       </div>
 
       <div class="card">
@@ -112,30 +116,54 @@
 <script>
 const cv=document.getElementById('stage'),ctx=cv.getContext('2d'),W=1000,H=1000;
 const hint=document.getElementById('hint'),selName=document.getElementById('selName'),listEl=document.getElementById('list');
-let bg='transparent',shadow=true,sel=-1,bgRemove=true,tol=34,mode='row';
-let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name}
+let bg='transparent',shadow=true,sel=-1,rmMode='fast',tol=34,mode='row';
+let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name,busy}
 
-// ===== 自動去背：四角洪水填充 =====
-function process(L){
-  const img=L.src;if(!img)return;
-  const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
-  const x=c.getContext('2d');x.drawImage(img,0,0);
-  if(bgRemove){
-    const w=c.width,h=c.height,d=x.getImageData(0,0,w,h),p=d.data;
-    const visited=new Uint8Array(w*h),stack=[];
-    let rr=0,gg=0,bb=0;const cor=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
-    cor.forEach(([cx,cy])=>{const o=(cy*w+cx)*4;rr+=p[o];gg+=p[o+1];bb+=p[o+2];});rr/=4;gg/=4;bb/=4;
-    const t=Math.pow(tol*3.1,2);
-    function push(cx,cy){if(cx<0||cy<0||cx>=w||cy>=h)return;const i=cy*w+cx;if(visited[i])return;visited[i]=1;stack.push(i);}
-    cor.forEach(([cx,cy])=>push(cx,cy));
-    while(stack.length){const i=stack.pop(),o=i*4;
-      const dr=p[o]-rr,dg=p[o+1]-gg,db=p[o+2]-bb;
-      if(dr*dr+dg*dg+db*db>t)continue;
-      p[o+3]=0;const cx=i%w,cy=(i/w)|0;
-      push(cx+1,cy);push(cx-1,cy);push(cx,cy+1);push(cx,cy-1);}
-    x.putImageData(d,0,0);
-  }
-  L.pc=c;
+// ===== 去背 =====
+function plainCanvas(img){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
+  c.getContext('2d').drawImage(img,0,0);return c;}
+
+// 快速去白底（四角洪水填充）
+function floodFill(img){
+  const c=plainCanvas(img),x=c.getContext('2d'),w=c.width,h=c.height;
+  const d=x.getImageData(0,0,w,h),p=d.data;
+  const visited=new Uint8Array(w*h),stack=[];
+  let rr=0,gg=0,bb=0;const cor=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
+  cor.forEach(([cx,cy])=>{const o=(cy*w+cx)*4;rr+=p[o];gg+=p[o+1];bb+=p[o+2];});rr/=4;gg/=4;bb/=4;
+  const t=Math.pow(tol*3.1,2);
+  function push(cx,cy){if(cx<0||cy<0||cx>=w||cy>=h)return;const i=cy*w+cx;if(visited[i])return;visited[i]=1;stack.push(i);}
+  cor.forEach(([cx,cy])=>push(cx,cy));
+  while(stack.length){const i=stack.pop(),o=i*4;
+    const dr=p[o]-rr,dg=p[o+1]-gg,db=p[o+2]-bb;
+    if(dr*dr+dg*dg+db*db>t)continue;
+    p[o+3]=0;const cx=i%w,cy=(i/w)|0;
+    push(cx+1,cy);push(cx-1,cy);push(cx,cy+1);push(cx,cy-1);}
+  x.putImageData(d,0,0);return c;
+}
+
+// AI 精準去背（瀏覽器端模型，圖片不外傳）
+let _lib;
+function setStatus(t){const el=document.getElementById('rmStatus');if(el&&t!==undefined)el.textContent=t;}
+async function aiRemove(L){
+  if(!_lib){setStatus('AI 模型載入中…首次較久，請稍候');_lib=await import('https://esm.sh/@imgly/background-removal');}
+  setStatus('AI 去背處理中…');
+  const blob=await _lib.removeBackground(L.src.src);
+  const url=URL.createObjectURL(blob);
+  const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+  const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;
+  c.getContext('2d').drawImage(im,0,0);URL.revokeObjectURL(url);return c;
+}
+
+async function process(L){
+  if(!L.src)return;
+  if(rmMode==='off'){L.pc=plainCanvas(L.src);return;}
+  if(rmMode==='fast'){L.pc=floodFill(L.src);return;}
+  // AI 模式：先給快速版即時預覽，再用 AI 替換
+  if(!L.pc)L.pc=floodFill(L.src);
+  L.busy=true;draw();buildList();
+  try{L.pc=await aiRemove(L);setStatus('AI 去背完成 ✓');}
+  catch(err){console.error(err);L.pc=floodFill(L.src);setStatus('⚠ AI 去背失敗，已改用快速去白底（請檢查網路）');}
+  L.busy=false;draw();buildList();
 }
 
 function fitScale(L){return Math.min(L.box.w/L.bw,L.box.h/L.bh)||1;}
@@ -173,7 +201,7 @@ function draw(){
   hint.style.display=layers.length?'none':'flex';
 }
 
-function reprocessAll(){layers.forEach(process);draw();buildList();}
+async function reprocessAll(){for(const L of layers){await process(L);}draw();buildList();}
 
 function buildList(){
   listEl.innerHTML='';
@@ -182,7 +210,7 @@ function buildList(){
     const mini=document.createElement('canvas');mini.width=mini.height=40;
     const mx=mini.getContext('2d');if(L.pc){const s=Math.min(40/L.bw,40/L.bh),w=L.bw*s,h=L.bh*s;
       mx.drawImage(L.pc,(40-w)/2,(40-h)/2,w,h);}
-    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品');
+    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?'　⏳去背中':'');
     const up=document.createElement('button');up.textContent='▲';up.title='上移';up.onclick=()=>move(i,-1);
     const dn=document.createElement('button');dn.textContent='▼';dn.title='下移';dn.onclick=()=>move(i,1);
     const del=document.createElement('button');del.className='del';del.textContent='✕';del.onclick=()=>remove(i);
@@ -201,9 +229,10 @@ function remove(i){layers.splice(i,1);sel=-1;selName.textContent='（點畫布�
 function addFile(file){
   if(!file||!file.type.startsWith('image/'))return;
   const r=new FileReader();
-  r.onload=e=>{const im=new Image();im.onload=()=>{
-    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,'')};
-    process(L);layers.push(L);autoLayout();draw();buildList();
+  r.onload=e=>{const im=new Image();im.onload=async()=>{
+    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,''),busy:false};
+    L.pc=floodFill(im);layers.push(L);autoLayout();draw();buildList();
+    await process(L);autoLayout();draw();buildList();
   };im.src=e.target.result;};
   r.readAsDataURL(file);
 }
@@ -233,7 +262,10 @@ cv.addEventListener('wheel',e=>{if(sel<0)return;e.preventDefault();
 
 document.getElementById('scale').addEventListener('input',e=>{if(sel<0)return;
   layers[sel].scale=fitScale(layers[sel])*(e.target.value/100);draw();});
-document.getElementById('bgrm').addEventListener('change',e=>{bgRemove=e.target.checked;reprocessAll();});
+document.querySelectorAll('#rmSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#rmSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  rmMode=b.dataset.r;document.getElementById('tolRow').style.display=(rmMode==='fast')?'flex':'none';
+  reprocessAll();});
 let tt;document.getElementById('tol').addEventListener('input',e=>{tol=+e.target.value;clearTimeout(tt);tt=setTimeout(reprocessAll,120);});
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
@@ -242,7 +274,9 @@ document.querySelectorAll('#bgSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#bgSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');bg=b.dataset.bg;draw();});
 document.getElementById('shadow').addEventListener('change',e=>{shadow=e.target.checked;draw();});
 document.getElementById('reset').onclick=()=>{autoLayout();sel=-1;selName.textContent='（點畫布上的圖選取）';draw();buildList();};
-document.getElementById('dl').onclick=()=>{const tmp=sel;sel=-1;draw();
+document.getElementById('dl').onclick=()=>{
+  if(layers.some(L=>L.busy)){alert('還在 AI 去背處理中，請等一下再下載');return;}
+  const tmp=sel;sel=-1;draw();
   let name=(document.getElementById('fn').value||'').trim().replace(/[\\/:*?"<>|]/g,'_').replace(/\.png$/i,'');
   if(!name)name='組合圖_1000x1000';
   const a=document.createElement('a');a.download=name+'.png';a.href=cv.toDataURL('image/png');a.click();sel=tmp;draw();};
