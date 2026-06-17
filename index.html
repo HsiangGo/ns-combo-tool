@@ -40,6 +40,10 @@
   .seg button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none;border-radius:8px;padding:8px 10px;background:#eef0f3;color:#333;}
   .seg button.on{background:#E60012;color:#fff;}
   .act{display:flex;flex-direction:column;gap:8px;}
+  .fname{display:flex;align-items:center;gap:6px;background:#f7f8fa;border:1px solid #e1e4e9;border-radius:8px;padding:6px 10px;}
+  .fname label{font-size:13px;font-weight:800;color:#444;flex:none;}
+  .fname input{flex:1;border:none;background:transparent;font-family:inherit;font-size:14px;color:#222;outline:none;min-width:0;}
+  .fname .ext{font-size:13px;font-weight:700;color:#9098a3;flex:none;}
   .act .dlbtn{background:#E60012;color:#fff;font-size:15px;padding:13px;border:none;border-radius:8px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(230,0,18,.3);}
   .act .ghost{background:#222;color:#fff;font-size:14px;padding:11px;border:none;border-radius:8px;font-weight:700;cursor:pointer;}
   .tipline{font-size:12px;color:#9098a3;line-height:1.6;margin-top:8px;}
@@ -94,6 +98,11 @@
       </div>
 
       <div class="act">
+        <div class="fname">
+          <label for="fn">檔名</label>
+          <input type="text" id="fn" placeholder="例如：NS2_NBA2K23_組合包" autocomplete="off">
+          <span class="ext">.png</span>
+        </div>
         <button class="dlbtn" id="dl">⬇ 下載組合圖 PNG</button>
         <button class="ghost" id="reset">重新自動排版</button>
       </div>
@@ -234,7 +243,9 @@ document.querySelectorAll('#bgSeg button').forEach(b=>b.onclick=()=>{
 document.getElementById('shadow').addEventListener('change',e=>{shadow=e.target.checked;draw();});
 document.getElementById('reset').onclick=()=>{autoLayout();sel=-1;selName.textContent='（點畫布上的圖選取）';draw();buildList();};
 document.getElementById('dl').onclick=()=>{const tmp=sel;sel=-1;draw();
-  const a=document.createElement('a');a.download='組合圖_1000x1000.png';a.href=cv.toDataURL('image/png');a.click();sel=tmp;draw();};
+  let name=(document.getElementById('fn').value||'').trim().replace(/[\\/:*?"<>|]/g,'_').replace(/\.png$/i,'');
+  if(!name)name='組合圖_1000x1000';
+  const a=document.createElement('a');a.download=name+'.png';a.href=cv.toDataURL('image/png');a.click();sel=tmp;draw();};
 
 draw();
 </script>
