@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>組合圖產生器 — 多商品版（自動去背）</title>
+<title>組合圖產生器</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif;background:#f0f2f5;color:#222;
@@ -19,120 +19,96 @@
   #stage.drag{cursor:grabbing;}
   .dropHint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     pointer-events:none;color:#9aa1ac;font-size:16px;font-weight:700;text-align:center;line-height:1.6;}
-  .panel{width:320px;display:flex;flex-direction:column;gap:14px;}
+
+  .panel{width:340px;display:flex;flex-direction:column;gap:14px;}
   .card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 4px 14px rgba(0,0,0,.06);}
   .card h3{font-size:14px;font-weight:800;margin-bottom:10px;}
   .upbtn{width:100%;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;border:2px dashed #cfd4dc;
     background:#f8f9fb;color:#555;border-radius:8px;padding:12px;text-align:center;}
   .upbtn:hover{border-color:#E60012;color:#E60012;}
-  /* 商品清單 */
-  .list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
-  .item{display:flex;flex-direction:column;gap:6px;background:#f7f8fa;border-radius:8px;padding:7px;}
-  .item .top,.item .bot{display:flex;align-items:center;gap:8px;}
-  .item .bot{gap:6px;}
-  .item .rmlbl{font-size:11px;font-weight:800;color:#9098a3;flex:none;}
-  .item .rmbtns{display:flex;gap:4px;flex:1;}
-  .item .rmbtns button{flex:1;font-family:inherit;font-size:11px;font-weight:800;border:1px solid #d7dbe2;background:#fff;color:#555;border-radius:6px;padding:5px 2px;cursor:pointer;width:auto;height:auto;}
-  .item .rmbtns button.on{background:#E60012;color:#fff;border-color:#E60012;}
-  .item.cur{outline:2px solid #E60012;}
-  .item canvas{width:40px;height:40px;background:#fff;border-radius:5px;object-fit:contain;flex:none;
+  .ghost{width:100%;background:#222;color:#fff;font-family:inherit;font-size:13px;padding:10px;border:none;border-radius:8px;font-weight:700;cursor:pointer;margin-top:8px;}
+
+  /* 商品卡 */
+  .plist{display:flex;flex-direction:column;gap:12px;margin-top:12px;}
+  .pcard{border:1px solid #e6e9ee;border-radius:10px;padding:10px;background:#fbfcfd;display:flex;flex-direction:column;gap:8px;}
+  .pcard.cur{border-color:#E60012;box-shadow:0 0 0 2px rgba(230,0,18,.12);}
+  .ptop{display:flex;align-items:center;gap:8px;}
+  .ptop canvas{width:42px;height:42px;flex:none;border-radius:6px;background:#fff;
     background-image:linear-gradient(45deg,#eceef1 25%,transparent 25%),linear-gradient(-45deg,#eceef1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eceef1 75%),linear-gradient(-45deg,transparent 75%,#eceef1 75%);background-size:10px 10px;}
-  .item .nm{flex:1;font-size:12px;font-weight:700;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  .item button{border:none;background:#e6e9ee;color:#444;font-weight:800;cursor:pointer;border-radius:6px;width:26px;height:26px;font-size:13px;}
-  .item button.del{background:#ffe5e7;color:#E60012;}
-  .row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#444;margin-top:8px;}
-  .row input[type=range]{flex:1;accent-color:#E60012;}
+  .ptop .nm{flex:1;font-size:13px;font-weight:800;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ptop .del{border:none;background:#ffe5e7;color:#E60012;font-weight:800;cursor:pointer;border-radius:6px;width:28px;height:28px;font-size:14px;flex:none;}
+  .prow{display:flex;align-items:center;gap:8px;}
+  .prow .pl{font-size:12px;font-weight:800;color:#7a818c;width:34px;flex:none;}
+  .prow input[type=range]{flex:1;accent-color:#E60012;min-width:0;}
+  .prow .pv{font-size:12px;font-weight:800;color:#444;width:38px;text-align:right;flex:none;}
+  .rmbtns,.posbtns{display:flex;gap:4px;flex:1;}
+  .rmbtns button,.posbtns button{flex:1;font-family:inherit;font-size:12px;font-weight:800;border:1px solid #d7dbe2;
+    background:#fff;color:#555;border-radius:6px;padding:6px 2px;cursor:pointer;}
+  .rmbtns button.on{background:#E60012;color:#fff;border-color:#E60012;}
+  .posbtns .sep{flex:none;width:1px;background:#e0e3e8;margin:2px 2px;padding:0;border:none;}
+  .pstatus{font-size:11px;color:#9098a3;line-height:1.5;}
+
+  /* 背景卡 */
   .seg{display:flex;gap:6px;}
-  .seg button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none;border-radius:8px;padding:8px 10px;background:#eef0f3;color:#333;}
+  .seg button{font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;border:none;border-radius:8px;padding:8px 10px;background:#eef0f3;color:#333;flex:1;}
   .seg button.on{background:#E60012;color:#fff;}
-  .act{display:flex;flex-direction:column;gap:8px;}
-  .fname{display:flex;align-items:center;gap:6px;background:#f7f8fa;border:1px solid #e1e4e9;border-radius:8px;padding:6px 10px;}
+  .row{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#444;margin-top:10px;}
+  .fname{display:flex;align-items:center;gap:6px;background:#f7f8fa;border:1px solid #e1e4e9;border-radius:8px;padding:7px 10px;margin-top:10px;}
   .fname label{font-size:13px;font-weight:800;color:#444;flex:none;}
   .fname input{flex:1;border:none;background:transparent;font-family:inherit;font-size:14px;color:#222;outline:none;min-width:0;}
   .fname .ext{font-size:13px;font-weight:700;color:#9098a3;flex:none;}
-  .act .dlbtn{background:#E60012;color:#fff;font-size:15px;padding:13px;border:none;border-radius:8px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(230,0,18,.3);}
-  .act .ghost{background:#222;color:#fff;font-size:14px;padding:11px;border:none;border-radius:8px;font-weight:700;cursor:pointer;}
-  .tipline{font-size:12px;color:#9098a3;line-height:1.6;margin-top:8px;}
-  .sel{font-size:12px;color:#E60012;font-weight:800;}
-  .badgeNew{background:#ff8a00;color:#fff;font-size:11px;font-weight:800;padding:2px 7px;border-radius:6px;margin-left:6px;}
+  .dlbtn{width:100%;background:#E60012;color:#fff;font-size:15px;padding:13px;border:none;border-radius:8px;font-weight:800;cursor:pointer;box-shadow:0 4px 12px rgba(230,0,18,.3);margin-top:10px;}
 </style>
 </head>
 <body>
-  <h1>組合圖產生器 <small>多商品 → 自動去背 → 自動排版 → 下載 PNG（1000×1000）</small></h1>
+  <h1>組合圖產生器 <small>每個商品獨立設定 ‧ 輸出 1000×1000 PNG</small></h1>
 
   <div class="wrap">
     <div class="stageBox">
       <canvas id="stage" width="1000" height="1000"></canvas>
-      <div class="dropHint" id="hint">把商品圖拖進來（可一次多張）<br>白底商品照即可，會自動去背</div>
+      <div class="dropHint" id="hint">把商品圖拖進來（可一次多張）</div>
     </div>
 
     <div class="panel">
       <div class="card">
-        <h3>① 加入商品（可多個）</h3>
-        <label class="upbtn" id="add">＋ 選擇圖片（可多選）/ 或拖入畫布</label>
+        <h3>商品（可多個）</h3>
+        <label class="upbtn" id="add">＋ 加入商品圖片（可多選）</label>
         <input type="file" id="file" accept="image/*" multiple hidden>
-        <div class="list" id="list"></div>
-        <div class="tipline">想加幾個就加幾個；清單可刪除 ✕、上下調整堆疊順序。</div>
+        <button class="ghost" id="arrange">↔ 自動排成一排</button>
+        <div class="plist" id="list"></div>
       </div>
 
       <div class="card">
-        <h3>② 去背 <span class="badgeNew">逐個可調</span></h3>
-        <div class="tipline" style="margin-top:0;margin-bottom:6px;">下面是「<b>整批套用</b>」；想單獨設定某個商品，到①清單每個商品自己的下拉選單調。</div>
-        <div class="seg" id="rmSeg">
-          <button data-r="fast" class="on">全部快速</button>
-          <button data-r="ai">全部 AI</button>
-          <button data-r="off">全部不去背</button>
-        </div>
-        <div class="row" id="tolRow">快速強度<input type="range" id="tol" min="5" max="80" value="34"></div>
-        <div class="tipline" id="rmStatus">快速：白底照秒去背。AI：任何背景都乾淨，首次需下載模型（約十幾 MB），每張數秒。圖片不會上傳。</div>
-      </div>
-
-      <div class="card">
-        <h3>③ 排版</h3>
-        <div class="seg" id="modeSeg">
-          <button data-m="row" class="on">一排（等高）</button>
-          <button data-m="grid">網格</button>
-        </div>
-        <div class="row">選取的圖 縮放<input type="range" id="scale" min="10" max="300" value="100"></div>
-        <span class="sel" id="selName">（點畫布上的圖選取）</span>
-        <div class="tipline">拖曳畫布上的圖可移動；滾輪縮放選取的圖。</div>
-      </div>
-
-      <div class="card">
-        <h3>④ 背景</h3>
+        <h3>背景與輸出</h3>
         <div class="seg" id="bgSeg">
           <button data-bg="transparent" class="on">透明</button>
           <button data-bg="#ffffff">白底</button>
           <button data-bg="#f4f4f6">淺灰</button>
         </div>
         <div class="row"><label><input type="checkbox" id="shadow" checked> 加柔和陰影</label></div>
-      </div>
-
-      <div class="act">
         <div class="fname">
           <label for="fn">檔名</label>
           <input type="text" id="fn" placeholder="例如：NS2_NBA2K23_組合包" autocomplete="off">
           <span class="ext">.png</span>
         </div>
         <button class="dlbtn" id="dl">⬇ 下載組合圖 PNG</button>
-        <button class="ghost" id="reset">重新自動排版</button>
       </div>
     </div>
   </div>
 
 <script>
-const cv=document.getElementById('stage'),ctx=cv.getContext('2d'),W=1000,H=1000;
-const hint=document.getElementById('hint'),selName=document.getElementById('selName'),listEl=document.getElementById('list');
-let bg='transparent',shadow=true,sel=-1,defRm='fast',tol=34,mode='row';
-let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name,busy,rm}
+const cv=document.getElementById('stage'),ctx=cv.getContext('2d'),W=1000,H=1000,PAD=80;
+const hint=document.getElementById('hint'),listEl=document.getElementById('list');
+let bg='transparent',shadow=true,sel=-1;
+let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name,busy,rm,tol}
 
 // ===== 去背 =====
 function plainCanvas(img){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
   c.getContext('2d').drawImage(img,0,0);return c;}
 
-// 快速去白底（四角洪水填充）
-function floodFill(img){
-  const c=plainCanvas(img),x=c.getContext('2d'),w=c.width,h=c.height;
+function floodFill(img,tol){
+  const c=plainCanvas(img);if(!tol)return c;            // 強度 0 → 不去背
+  const x=c.getContext('2d'),w=c.width,h=c.height;
   const d=x.getImageData(0,0,w,h),p=d.data;
   const visited=new Uint8Array(w*h),stack=[];
   let rr=0,gg=0,bb=0;const cor=[[0,0],[w-1,0],[0,h-1],[w-1,h-1]];
@@ -148,12 +124,10 @@ function floodFill(img){
   x.putImageData(d,0,0);return c;
 }
 
-// AI 精準去背（瀏覽器端模型，圖片不外傳）
 let _lib;
-function setStatus(t){const el=document.getElementById('rmStatus');if(el&&t!==undefined)el.textContent=t;}
-async function aiRemove(L){
-  if(!_lib){setStatus('AI 模型載入中…首次較久，請稍候');_lib=await import('https://esm.sh/@imgly/background-removal');}
-  setStatus('AI 去背處理中…');
+async function aiRemove(L,statusEl){
+  if(!_lib){if(statusEl)statusEl.textContent='AI 模型載入中…首次較久';_lib=await import('https://esm.sh/@imgly/background-removal');}
+  if(statusEl)statusEl.textContent='AI 去背處理中…';
   const blob=await _lib.removeBackground(L.src.src);
   const url=URL.createObjectURL(blob);
   const im=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
@@ -163,37 +137,28 @@ async function aiRemove(L){
 
 async function process(L){
   if(!L.src)return;
-  if(!L.rm)L.rm=defRm;
   if(L.rm==='off'){L.pc=plainCanvas(L.src);return;}
-  if(L.rm==='fast'){L.pc=floodFill(L.src);return;}
-  // AI 模式：先給快速版即時預覽，再用 AI 替換
-  if(!L.pc)L.pc=floodFill(L.src);
+  if(L.rm==='fast'){L.pc=floodFill(L.src,L.tol);return;}
+  if(!L.pc)L.pc=floodFill(L.src,L.tol);
   L.busy=true;draw();buildList();
-  try{L.pc=await aiRemove(L);setStatus('AI 去背完成 ✓');}
-  catch(err){console.error(err);L.pc=floodFill(L.src);setStatus('⚠ AI 去背失敗，已改用快速去白底（請檢查網路）');}
+  const st=document.getElementById('st-'+L.id);
+  try{L.pc=await aiRemove(L,st);if(st)st.textContent='AI 去背完成 ✓';}
+  catch(err){console.error(err);L.pc=floodFill(L.src,L.tol||20);if(st)st.textContent='⚠ AI 失敗，改用快速去背';}
   L.busy=false;draw();buildList();
 }
 
 function fitScale(L){return Math.min(L.box.w/L.bw,L.box.h/L.bh)||1;}
 
-// ===== 自動排版 =====
-function autoLayout(){
+// 自動排成一排
+function arrange(){
   const n=layers.length;if(!n)return;
-  if(mode==='row'){
-    const pad=70,gap0=44,H0=Math.min(560,H-pad*2),avail=W-pad*2;
-    let ws=layers.map(L=>L.bh?L.bw*(H0/L.bh):0);
-    let total=ws.reduce((a,b)=>a+b,0)+gap0*(n-1);
-    const k=total>avail?avail/total:1,h=H0*k,gap=gap0*k;
-    ws=ws.map(w=>w*k);
-    const rowW=ws.reduce((a,b)=>a+b,0)+gap*(n-1);let x=(W-rowW)/2;
-    layers.forEach((L,i)=>{const w=ws[i];L.box={w,h};L.scale=L.bw?w/L.bw:1;L.x=x+w/2;L.y=H/2;x+=w+gap;});
-  }else{
-    const cols=n<=3?n:Math.ceil(Math.sqrt(n)),rows=Math.ceil(n/cols),pad=64;
-    const cellW=(W-pad*2)/cols,cellH=(H-pad*2)/rows;
-    layers.forEach((L,i)=>{const r=Math.floor(i/cols),c=i%cols;
-      L.box={w:cellW*0.84,h:cellH*0.84};L.scale=fitScale(L);
-      L.x=pad+cellW*(c+0.5);L.y=pad+cellH*(r+0.5);});
-  }
+  const gap0=44,H0=Math.min(560,H-PAD*2),avail=W-PAD*2;
+  let ws=layers.map(L=>L.bh?L.bw*(H0/L.bh):0);
+  let total=ws.reduce((a,b)=>a+b,0)+gap0*(n-1);
+  const k=total>avail?avail/total:1,h=H0*k,gap=gap0*k;
+  ws=ws.map(w=>w*k);
+  const rowW=ws.reduce((a,b)=>a+b,0)+gap*(n-1);let x=(W-rowW)/2;
+  layers.forEach((L,i)=>{const w=ws[i];L.box={w,h};L.scale=L.bw?w/L.bw:1;L.x=x+w/2;L.y=H/2;x+=w+gap;});
 }
 
 function draw(){
@@ -209,93 +174,105 @@ function draw(){
   hint.style.display=layers.length?'none':'flex';
 }
 
-async function reprocessAll(){for(const L of layers){await process(L);}draw();buildList();}
+// ===== 商品卡清單 =====
+function miniDraw(cvs,L){const mx=cvs.getContext('2d');mx.clearRect(0,0,42,42);
+  if(L.pc){const s=Math.min(42/L.bw,42/L.bh),w=L.bw*s,h=L.bh*s;mx.drawImage(L.pc,(42-w)/2,(42-h)/2,w,h);}}
+
+function setPos(L,hpos,vpos){const w=L.bw*L.scale,h=L.bh*L.scale;
+  if(hpos==='L')L.x=PAD+w/2;else if(hpos==='C')L.x=W/2;else if(hpos==='R')L.x=W-PAD-w/2;
+  if(vpos==='T')L.y=PAD+h/2;else if(vpos==='M')L.y=H/2;else if(vpos==='B')L.y=H-PAD-h/2;
+  draw();}
 
 function buildList(){
   listEl.innerHTML='';
   layers.forEach((L,i)=>{
-    const it=document.createElement('div');it.className='item'+(i===sel?' cur':'');
-    // 上排：縮圖 + 名稱 + 刪除
-    const top=document.createElement('div');top.className='top';
-    const mini=document.createElement('canvas');mini.width=mini.height=40;
-    const mx=mini.getContext('2d');if(L.pc){const s=Math.min(40/L.bw,40/L.bh),w=L.bw*s,h=L.bh*s;
-      mx.drawImage(L.pc,(40-w)/2,(40-h)/2,w,h);}
-    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?'　⏳':'');
-    const del=document.createElement('button');del.className='del';del.textContent='✕';del.title='刪除';del.onclick=()=>remove(i);
+    const card=document.createElement('div');card.className='pcard'+(i===sel?' cur':'');
+
+    const top=document.createElement('div');top.className='ptop';
+    const mini=document.createElement('canvas');mini.width=mini.height=42;miniDraw(mini,L);
+    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?' ⏳':'');
+    const del=document.createElement('button');del.className='del';del.textContent='✕';del.onclick=()=>remove(i);
     top.append(mini,nm,del);
-    // 下排：此商品去背三選一 + 上下移
-    const bot=document.createElement('div');bot.className='bot';
-    const rl=document.createElement('span');rl.className='rmlbl';rl.textContent='去背';
+
+    // 去背模式
+    const r1=document.createElement('div');r1.className='prow';
+    const rl=document.createElement('span');rl.className='pl';rl.textContent='去背';
     const rb=document.createElement('div');rb.className='rmbtns';
-    const cur=L.rm||defRm;
     [['fast','快速'],['ai','AI'],['off','不去背']].forEach(([v,t])=>{
-      const o=document.createElement('button');o.textContent=t;if(cur===v)o.classList.add('on');
-      o.onclick=ev=>{ev.stopPropagation();if((L.rm||defRm)===v)return;L.rm=v;rmOne(L);};rb.appendChild(o);});
-    const up=document.createElement('button');up.textContent='▲';up.title='上移';up.onclick=()=>move(i,-1);
-    const dn=document.createElement('button');dn.textContent='▼';dn.title='下移';dn.onclick=()=>move(i,1);
-    bot.append(rl,rb,up,dn);
-    it.append(top,bot);
-    it.onclick=e=>{if(e.target.closest('button')||e.target.closest('select'))return;sel=i;selName.textContent='（'+(L.name||'商品')+'）';
-      document.getElementById('scale').value=Math.round(L.scale/fitScale(L)*100);draw();buildList();};
-    listEl.appendChild(it);
+      const o=document.createElement('button');o.textContent=t;if(L.rm===v)o.classList.add('on');
+      o.onclick=()=>{if(L.rm===v)return;L.rm=v;sel=i;rmOne(L);};rb.appendChild(o);});
+    r1.append(rl,rb);
+
+    // 強度（只在快速模式顯示）
+    const r2=document.createElement('div');r2.className='prow';r2.style.display=(L.rm==='fast')?'flex':'none';
+    const sl=document.createElement('span');sl.className='pl';sl.textContent='強度';
+    const si=document.createElement('input');si.type='range';si.min=0;si.max=80;si.value=L.tol;
+    const sv=document.createElement('span');sv.className='pv';sv.textContent=L.tol;
+    let st;si.oninput=()=>{L.tol=+si.value;sv.textContent=L.tol;sel=i;clearTimeout(st);
+      st=setTimeout(()=>{L.pc=floodFill(L.src,L.tol);miniDraw(mini,L);draw();},80);};
+    r2.append(sl,si,sv);
+
+    // 大小
+    const r3=document.createElement('div');r3.className='prow';
+    const zl=document.createElement('span');zl.className='pl';zl.textContent='大小';
+    const zi=document.createElement('input');zi.type='range';zi.min=10;zi.max=300;zi.value=Math.round(L.scale/fitScale(L)*100);
+    const zv=document.createElement('span');zv.className='pv';zv.textContent=zi.value+'%';
+    zi.oninput=()=>{L.scale=fitScale(L)*(zi.value/100);zv.textContent=zi.value+'%';sel=i;draw();};
+    r3.append(zl,zi,zv);
+
+    // 位置
+    const r4=document.createElement('div');r4.className='prow';
+    const pl=document.createElement('span');pl.className='pl';pl.textContent='位置';
+    const pb=document.createElement('div');pb.className='posbtns';
+    [['L','左'],['C','中'],['R','右']].forEach(([v,t])=>{const o=document.createElement('button');o.textContent=t;o.onclick=()=>{sel=i;setPos(L,v,null);buildList();};pb.appendChild(o);});
+    const sep=document.createElement('div');sep.className='sep';pb.appendChild(sep);
+    [['T','上'],['M','中'],['B','下']].forEach(([v,t])=>{const o=document.createElement('button');o.textContent=t;o.onclick=()=>{sel=i;setPos(L,null,v);buildList();};pb.appendChild(o);});
+    r4.append(pl,pb);
+
+    const stt=document.createElement('div');stt.className='pstatus';stt.id='st-'+L.id;
+
+    card.append(top,r1,r2,r3,r4,stt);
+    listEl.appendChild(card);
   });
 }
 async function rmOne(L){await process(L);draw();buildList();}
-function move(i,d){const j=i+d;if(j<0||j>=layers.length)return;
-  [layers[i],layers[j]]=[layers[j],layers[i]];if(sel===i)sel=j;else if(sel===j)sel=i;
-  autoLayout();draw();buildList();}
-function remove(i){layers.splice(i,1);sel=-1;selName.textContent='（點畫布上的圖選取）';
-  autoLayout();draw();buildList();}
+function remove(i){layers.splice(i,1);if(sel>=layers.length)sel=-1;draw();buildList();}
 
+let _id=0;
 function addFile(file){
   if(!file||!file.type.startsWith('image/'))return;
   const r=new FileReader();
-  r.onload=e=>{const im=new Image();im.onload=async()=>{
-    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,''),busy:false,rm:defRm};
-    L.pc=floodFill(im);layers.push(L);autoLayout();draw();buildList();
-    await process(L);autoLayout();draw();buildList();
+  r.onload=e=>{const im=new Image();im.onload=()=>{
+    const L={id:++_id,src:im,pc:null,x:W/2,y:H/2,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,
+      box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,''),busy:false,rm:'fast',tol:0};
+    L.pc=floodFill(im,0);layers.push(L);arrange();draw();buildList();
   };im.src=e.target.result;};
   r.readAsDataURL(file);
 }
 
 document.getElementById('add').onclick=()=>document.getElementById('file').click();
 document.getElementById('file').addEventListener('change',e=>{[...e.target.files].forEach(addFile);e.target.value='';});
+document.getElementById('arrange').onclick=()=>{arrange();draw();buildList();};
 ['dragover','dragenter'].forEach(ev=>cv.addEventListener(ev,e=>e.preventDefault()));
 cv.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].filter(f=>f.type.startsWith('image/')).forEach(addFile);});
 
+// 畫布拖曳
 function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height};}
 function hit(p){for(let i=layers.length-1;i>=0;i--){const L=layers[i];if(!L.pc)continue;
   const w=L.bw*L.scale,h=L.bh*L.scale;
   if(p.x>=L.x-w/2&&p.x<=L.x+w/2&&p.y>=L.y-h/2&&p.y<=L.y+h/2)return i;}return -1;}
 let drag=false,off={x:0,y:0};
 cv.addEventListener('pointerdown',e=>{const p=pt(e),i=hit(p);sel=i;
-  if(i>=0){drag=true;cv.classList.add('drag');cv.setPointerCapture(e.pointerId);
-    off={x:p.x-layers[i].x,y:p.y-layers[i].y};
-    document.getElementById('scale').value=Math.round(layers[i].scale/fitScale(layers[i])*100);
-    selName.textContent='（'+(layers[i].name||'商品')+'）';}
-  else selName.textContent='（點畫布上的圖選取）';draw();buildList();});
-cv.addEventListener('pointermove',e=>{if(!drag||sel<0)return;const p=pt(e);
-  layers[sel].x=p.x-off.x;layers[sel].y=p.y-off.y;draw();});
+  if(i>=0){drag=true;cv.classList.add('drag');cv.setPointerCapture(e.pointerId);off={x:p.x-layers[i].x,y:p.y-layers[i].y};}
+  draw();buildList();});
+cv.addEventListener('pointermove',e=>{if(!drag||sel<0)return;const p=pt(e);layers[sel].x=p.x-off.x;layers[sel].y=p.y-off.y;draw();});
 cv.addEventListener('pointerup',()=>{drag=false;cv.classList.remove('drag');});
-cv.addEventListener('wheel',e=>{if(sel<0)return;e.preventDefault();
-  layers[sel].scale*=e.deltaY<0?1.06:0.94;
-  document.getElementById('scale').value=Math.round(layers[sel].scale/fitScale(layers[sel])*100);draw();},{passive:false});
+cv.addEventListener('wheel',e=>{if(sel<0)return;e.preventDefault();layers[sel].scale*=e.deltaY<0?1.06:0.94;draw();buildList();},{passive:false});
 
-document.getElementById('scale').addEventListener('input',e=>{if(sel<0)return;
-  layers[sel].scale=fitScale(layers[sel])*(e.target.value/100);draw();});
-document.querySelectorAll('#rmSeg button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('#rmSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  defRm=b.dataset.r;document.getElementById('tolRow').style.display=(defRm==='fast')?'flex':'none';
-  layers.forEach(L=>L.rm=defRm);reprocessAll();});
-let tt;document.getElementById('tol').addEventListener('input',e=>{tol=+e.target.value;clearTimeout(tt);
-  tt=setTimeout(async()=>{for(const L of layers){if(L.rm==='fast')await process(L);}draw();buildList();},120);});
-document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
-  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  mode=b.dataset.m;autoLayout();draw();});
+// 背景與輸出
 document.querySelectorAll('#bgSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#bgSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');bg=b.dataset.bg;draw();});
 document.getElementById('shadow').addEventListener('change',e=>{shadow=e.target.checked;draw();});
-document.getElementById('reset').onclick=()=>{autoLayout();sel=-1;selName.textContent='（點畫布上的圖選取）';draw();buildList();};
 document.getElementById('dl').onclick=()=>{
   if(layers.some(L=>L.busy)){alert('還在 AI 去背處理中，請等一下再下載');return;}
   const tmp=sel;sel=-1;draw();
