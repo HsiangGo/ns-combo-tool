@@ -27,7 +27,11 @@
   .upbtn:hover{border-color:#E60012;color:#E60012;}
   /* 商品清單 */
   .list{display:flex;flex-direction:column;gap:8px;margin-top:10px;}
-  .item{display:flex;align-items:center;gap:8px;background:#f7f8fa;border-radius:8px;padding:6px;}
+  .item{display:flex;flex-direction:column;gap:6px;background:#f7f8fa;border-radius:8px;padding:7px;}
+  .item .top,.item .bot{display:flex;align-items:center;gap:8px;}
+  .item .bot{gap:6px;}
+  .item .rmlbl{font-size:11px;font-weight:800;color:#9098a3;flex:none;}
+  .item .rmsel{flex:1;font-family:inherit;font-size:12px;font-weight:700;border:1px solid #d7dbe2;border-radius:6px;padding:5px;background:#fff;color:#333;cursor:pointer;}
   .item.cur{outline:2px solid #E60012;}
   .item canvas{width:40px;height:40px;background:#fff;border-radius:5px;object-fit:contain;flex:none;
     background-image:linear-gradient(45deg,#eceef1 25%,transparent 25%),linear-gradient(-45deg,#eceef1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eceef1 75%),linear-gradient(-45deg,transparent 75%,#eceef1 75%);background-size:10px 10px;}
@@ -70,14 +74,15 @@
       </div>
 
       <div class="card">
-        <h3>② 去背 <span class="badgeNew">AI</span></h3>
+        <h3>② 去背 <span class="badgeNew">逐個可調</span></h3>
+        <div class="tipline" style="margin-top:0;margin-bottom:6px;">下面是「<b>整批套用</b>」；想單獨設定某個商品，到①清單每個商品自己的下拉選單調。</div>
         <div class="seg" id="rmSeg">
-          <button data-r="fast" class="on">快速去白底</button>
-          <button data-r="ai">✨ AI 精準</button>
-          <button data-r="off">不去背</button>
+          <button data-r="fast" class="on">全部快速</button>
+          <button data-r="ai">全部 AI</button>
+          <button data-r="off">全部不去背</button>
         </div>
-        <div class="row" id="tolRow">強度<input type="range" id="tol" min="5" max="80" value="34"></div>
-        <div class="tipline" id="rmStatus">快速：白底照秒去背。AI：任何背景都乾淨，首次需下載模型（約十幾 MB），每張處理數秒。圖片不會上傳。</div>
+        <div class="row" id="tolRow">快速強度<input type="range" id="tol" min="5" max="80" value="34"></div>
+        <div class="tipline" id="rmStatus">快速：白底照秒去背。AI：任何背景都乾淨，首次需下載模型（約十幾 MB），每張數秒。圖片不會上傳。</div>
       </div>
 
       <div class="card">
@@ -116,8 +121,8 @@
 <script>
 const cv=document.getElementById('stage'),ctx=cv.getContext('2d'),W=1000,H=1000;
 const hint=document.getElementById('hint'),selName=document.getElementById('selName'),listEl=document.getElementById('list');
-let bg='transparent',shadow=true,sel=-1,rmMode='fast',tol=34,mode='row';
-let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name,busy}
+let bg='transparent',shadow=true,sel=-1,defRm='fast',tol=34,mode='row';
+let layers=[]; // {src,pc,x,y,scale,bw,bh,box,name,busy,rm}
 
 // ===== 去背 =====
 function plainCanvas(img){const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;
@@ -156,8 +161,9 @@ async function aiRemove(L){
 
 async function process(L){
   if(!L.src)return;
-  if(rmMode==='off'){L.pc=plainCanvas(L.src);return;}
-  if(rmMode==='fast'){L.pc=floodFill(L.src);return;}
+  if(!L.rm)L.rm=defRm;
+  if(L.rm==='off'){L.pc=plainCanvas(L.src);return;}
+  if(L.rm==='fast'){L.pc=floodFill(L.src);return;}
   // AI 模式：先給快速版即時預覽，再用 AI 替換
   if(!L.pc)L.pc=floodFill(L.src);
   L.busy=true;draw();buildList();
@@ -207,19 +213,31 @@ function buildList(){
   listEl.innerHTML='';
   layers.forEach((L,i)=>{
     const it=document.createElement('div');it.className='item'+(i===sel?' cur':'');
+    // 上排：縮圖 + 名稱 + 刪除
+    const top=document.createElement('div');top.className='top';
     const mini=document.createElement('canvas');mini.width=mini.height=40;
     const mx=mini.getContext('2d');if(L.pc){const s=Math.min(40/L.bw,40/L.bh),w=L.bw*s,h=L.bh*s;
       mx.drawImage(L.pc,(40-w)/2,(40-h)/2,w,h);}
-    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?'　⏳去背中':'');
+    const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?'　⏳':'');
+    const del=document.createElement('button');del.className='del';del.textContent='✕';del.title='刪除';del.onclick=()=>remove(i);
+    top.append(mini,nm,del);
+    // 下排：此商品去背選擇 + 上下移
+    const bot=document.createElement('div');bot.className='bot';
+    const rl=document.createElement('span');rl.className='rmlbl';rl.textContent='去背';
+    const rs=document.createElement('select');rs.className='rmsel';
+    [['fast','快速去白底'],['ai','✨ AI 精準'],['off','不去背']].forEach(([v,t])=>{
+      const o=document.createElement('option');o.value=v;o.textContent=t;if((L.rm||defRm)===v)o.selected=true;rs.appendChild(o);});
+    rs.onchange=()=>{L.rm=rs.value;rmOne(L);};
     const up=document.createElement('button');up.textContent='▲';up.title='上移';up.onclick=()=>move(i,-1);
     const dn=document.createElement('button');dn.textContent='▼';dn.title='下移';dn.onclick=()=>move(i,1);
-    const del=document.createElement('button');del.className='del';del.textContent='✕';del.onclick=()=>remove(i);
-    it.append(mini,nm,up,dn,del);
-    it.onclick=e=>{if(e.target.tagName==='BUTTON')return;sel=i;selName.textContent='（'+(L.name||'商品')+'）';
+    bot.append(rl,rs,up,dn);
+    it.append(top,bot);
+    it.onclick=e=>{if(e.target.closest('button')||e.target.closest('select'))return;sel=i;selName.textContent='（'+(L.name||'商品')+'）';
       document.getElementById('scale').value=Math.round(L.scale/fitScale(L)*100);draw();buildList();};
     listEl.appendChild(it);
   });
 }
+async function rmOne(L){await process(L);draw();buildList();}
 function move(i,d){const j=i+d;if(j<0||j>=layers.length)return;
   [layers[i],layers[j]]=[layers[j],layers[i]];if(sel===i)sel=j;else if(sel===j)sel=i;
   autoLayout();draw();buildList();}
@@ -230,7 +248,7 @@ function addFile(file){
   if(!file||!file.type.startsWith('image/'))return;
   const r=new FileReader();
   r.onload=e=>{const im=new Image();im.onload=async()=>{
-    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,''),busy:false};
+    const L={src:im,pc:null,x:0,y:0,scale:1,bw:im.naturalWidth,bh:im.naturalHeight,box:{w:300,h:300},name:file.name.replace(/\.[^.]+$/,''),busy:false,rm:defRm};
     L.pc=floodFill(im);layers.push(L);autoLayout();draw();buildList();
     await process(L);autoLayout();draw();buildList();
   };im.src=e.target.result;};
@@ -264,9 +282,10 @@ document.getElementById('scale').addEventListener('input',e=>{if(sel<0)return;
   layers[sel].scale=fitScale(layers[sel])*(e.target.value/100);draw();});
 document.querySelectorAll('#rmSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#rmSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  rmMode=b.dataset.r;document.getElementById('tolRow').style.display=(rmMode==='fast')?'flex':'none';
-  reprocessAll();});
-let tt;document.getElementById('tol').addEventListener('input',e=>{tol=+e.target.value;clearTimeout(tt);tt=setTimeout(reprocessAll,120);});
+  defRm=b.dataset.r;document.getElementById('tolRow').style.display=(defRm==='fast')?'flex':'none';
+  layers.forEach(L=>L.rm=defRm);reprocessAll();});
+let tt;document.getElementById('tol').addEventListener('input',e=>{tol=+e.target.value;clearTimeout(tt);
+  tt=setTimeout(async()=>{for(const L of layers){if(L.rm==='fast')await process(L);}draw();buildList();},120);});
 document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');
   mode=b.dataset.m;autoLayout();draw();});
