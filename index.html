@@ -31,7 +31,9 @@
   .item .top,.item .bot{display:flex;align-items:center;gap:8px;}
   .item .bot{gap:6px;}
   .item .rmlbl{font-size:11px;font-weight:800;color:#9098a3;flex:none;}
-  .item .rmsel{flex:1;font-family:inherit;font-size:12px;font-weight:700;border:1px solid #d7dbe2;border-radius:6px;padding:5px;background:#fff;color:#333;cursor:pointer;}
+  .item .rmbtns{display:flex;gap:4px;flex:1;}
+  .item .rmbtns button{flex:1;font-family:inherit;font-size:11px;font-weight:800;border:1px solid #d7dbe2;background:#fff;color:#555;border-radius:6px;padding:5px 2px;cursor:pointer;width:auto;height:auto;}
+  .item .rmbtns button.on{background:#E60012;color:#fff;border-color:#E60012;}
   .item.cur{outline:2px solid #E60012;}
   .item canvas{width:40px;height:40px;background:#fff;border-radius:5px;object-fit:contain;flex:none;
     background-image:linear-gradient(45deg,#eceef1 25%,transparent 25%),linear-gradient(-45deg,#eceef1 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eceef1 75%),linear-gradient(-45deg,transparent 75%,#eceef1 75%);background-size:10px 10px;}
@@ -221,16 +223,17 @@ function buildList(){
     const nm=document.createElement('div');nm.className='nm';nm.textContent=(i+1)+'. '+(L.name||'商品')+(L.busy?'　⏳':'');
     const del=document.createElement('button');del.className='del';del.textContent='✕';del.title='刪除';del.onclick=()=>remove(i);
     top.append(mini,nm,del);
-    // 下排：此商品去背選擇 + 上下移
+    // 下排：此商品去背三選一 + 上下移
     const bot=document.createElement('div');bot.className='bot';
     const rl=document.createElement('span');rl.className='rmlbl';rl.textContent='去背';
-    const rs=document.createElement('select');rs.className='rmsel';
-    [['fast','快速去白底'],['ai','✨ AI 精準'],['off','不去背']].forEach(([v,t])=>{
-      const o=document.createElement('option');o.value=v;o.textContent=t;if((L.rm||defRm)===v)o.selected=true;rs.appendChild(o);});
-    rs.onchange=()=>{L.rm=rs.value;rmOne(L);};
+    const rb=document.createElement('div');rb.className='rmbtns';
+    const cur=L.rm||defRm;
+    [['fast','快速'],['ai','AI'],['off','不去背']].forEach(([v,t])=>{
+      const o=document.createElement('button');o.textContent=t;if(cur===v)o.classList.add('on');
+      o.onclick=ev=>{ev.stopPropagation();if((L.rm||defRm)===v)return;L.rm=v;rmOne(L);};rb.appendChild(o);});
     const up=document.createElement('button');up.textContent='▲';up.title='上移';up.onclick=()=>move(i,-1);
     const dn=document.createElement('button');dn.textContent='▼';dn.title='下移';dn.onclick=()=>move(i,1);
-    bot.append(rl,rs,up,dn);
+    bot.append(rl,rb,up,dn);
     it.append(top,bot);
     it.onclick=e=>{if(e.target.closest('button')||e.target.closest('select'))return;sel=i;selName.textContent='（'+(L.name||'商品')+'）';
       document.getElementById('scale').value=Math.round(L.scale/fitScale(L)*100);draw();buildList();};
