@@ -51,6 +51,9 @@
   .ptag.product{background:#2fae5e;}.ptag.logo{background:#3478f6;}.ptag.text{background:#8a5cf6;}.ptag.badge{background:#E60012;}
   .ptop .nm{flex:1;font-size:13px;font-weight:800;color:#333;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .ptop .del{border:none;background:#ffe5e7;color:#E60012;font-weight:800;cursor:pointer;border-radius:6px;width:28px;height:28px;font-size:14px;flex:none;}
+  .ptop .lock{border:none;background:#eef0f3;cursor:pointer;border-radius:6px;width:28px;height:28px;font-size:14px;flex:none;line-height:1;}
+  .ptop .lock.on{background:#fff3cd;}
+  .pcard.locked{opacity:.92;}
   .prow{display:flex;align-items:center;gap:8px;}
   .prow .pl{font-size:12px;font-weight:800;color:#7a818c;width:34px;flex:none;}
   .prow input[type=range]{flex:1;accent-color:#E60012;min-width:0;}
@@ -83,7 +86,7 @@
       <canvas id="stage" width="1000" height="1000"></canvas>
       <div class="stagefoot">
         <label><input type="checkbox" id="grid" checked> 顯示座標格線（不匯出）</label>
-        <span id="hint">把商品圖拖進來</span>
+        <span id="hint">拖曳移動 ｜ 四角拖曳＝等比縮放 ｜ Alt＋四角拖曳＝裁切 ｜ 滾輪也可縮放</span>
       </div>
     </div>
 
@@ -131,9 +134,10 @@
         <div class="fname">
           <label for="fn">檔名</label>
           <input type="text" id="fn" placeholder="例如：賣場A_NS2組合包" autocomplete="off">
-          <span class="ext">.png</span>
+          <span class="ext">.png / .jpg</span>
         </div>
         <button class="dlbtn" id="dl">⬇ 下載組合圖 PNG</button>
+        <button class="dlbtn" id="dlJpg" style="background:#0a7d2c;box-shadow:0 4px 12px rgba(10,125,44,.3);">⬇ 下載組合圖 JPG</button>
       </div>
     </div>
   </div>
@@ -195,11 +199,23 @@ async function process(L){
 
 /* ---------- 尺寸 / 命中 ---------- */
 function fontOf(L){return (L.weight||800)+' '+L.size+'px "Noto Sans TC","Microsoft JhengHei",sans-serif';}
+function isImg(L){return L.type==='product'||L.type==='logo';}
+function cropOf(L){return (isImg(L)&&L.crop)?L.crop:{x:0,y:0,w:L.bw,h:L.bh};}
+function clamp(v,a,b){return v<a?a:(v>b?b:v);}
 function boxOf(L){
   if(L.type==='text'){ctx.font=fontOf(L);const w=ctx.measureText(L.text||' ').width;return{w:w,h:L.size*1.3};}
   if(L.type==='badge'){ctx.font='800 '+L.size+'px "Noto Sans TC",sans-serif';const w=ctx.measureText(L.text||' ').width;return{w:w+L.size*0.9,h:L.size*1.5};}
-  return{w:L.bw*L.scale,h:L.bh*L.scale};
+  const cr=cropOf(L);return{w:cr.w*L.scale,h:cr.h*L.scale};
 }
+// 四角控制點（畫布座標）；cx/cy 為 ±1 表示左右、上下
+function cornerPts(L){const b=boxOf(L);return [
+  {cx:-1,cy:-1,x:L.x-b.w/2,y:L.y-b.h/2},
+  {cx: 1,cy:-1,x:L.x+b.w/2,y:L.y-b.h/2},
+  {cx:-1,cy: 1,x:L.x-b.w/2,y:L.y+b.h/2},
+  {cx: 1,cy: 1,x:L.x+b.w/2,y:L.y+b.h/2}];}
+function hitHandle(L,p){const r=30;for(const c of cornerPts(L)){if(Math.abs(p.x-c.x)<=r&&Math.abs(p.y-c.y)<=r)return c;}return null;}
+function drawHandles(L){const hs=22;ctx.save();ctx.fillStyle='#fff';ctx.strokeStyle='#E60012';ctx.lineWidth=3;ctx.setLineDash([]);
+  cornerPts(L).forEach(c=>{ctx.beginPath();ctx.rect(c.x-hs/2,c.y-hs/2,hs,hs);ctx.fill();ctx.stroke();});ctx.restore();}
 
 /* ---------- 繪圖 ---------- */
 function roundRect(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect){ctx.roundRect(x,y,w,h,r);}else{
@@ -209,7 +225,7 @@ function drawLayer(L){
   if(L.type==='product'||L.type==='logo'){
     if(!L.pc)return;ctx.save();
     if(shadow&&L.type==='product'){ctx.shadowColor='rgba(0,0,0,.22)';ctx.shadowBlur=26;ctx.shadowOffsetY=14;}
-    ctx.drawImage(L.pc,L.x-b.w/2,L.y-b.h/2,b.w,b.h);ctx.restore();
+    const cr=cropOf(L);ctx.drawImage(L.pc,cr.x,cr.y,cr.w,cr.h,L.x-b.w/2,L.y-b.h/2,b.w,b.h);ctx.restore();
   }else if(L.type==='text'){
     ctx.save();ctx.font=fontOf(L);ctx.fillStyle=L.color||'#111';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(L.text||'',L.x,L.y);ctx.restore();
@@ -234,7 +250,7 @@ function draw(){
   if(bg!=='transparent'){ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);}
   layers.forEach((L,i)=>{drawLayer(L);
     if(i===sel&&!exporting){const b=boxOf(L);ctx.save();ctx.strokeStyle='#E60012';ctx.setLineDash([10,8]);ctx.lineWidth=3;
-      ctx.strokeRect(L.x-b.w/2,L.y-b.h/2,b.w,b.h);ctx.restore();}});
+      ctx.strokeRect(L.x-b.w/2,L.y-b.h/2,b.w,b.h);ctx.restore();if(!L.locked)drawHandles(L);}});
   if(showGrid&&!exporting)drawGrid();
 }
 
@@ -250,14 +266,17 @@ const TYPE={product:'商品',logo:'LOGO',text:'文字',badge:'紅標'};
 function buildList(){
   listEl.innerHTML='';
   layers.forEach((L,i)=>{
-    const card=document.createElement('div');card.className='pcard'+(i===sel?' cur':'');
+    const card=document.createElement('div');card.className='pcard'+(i===sel?' cur':'')+(L.locked?' locked':'');
     const top=document.createElement('div');top.className='ptop';
     const mini=document.createElement('canvas');mini.width=mini.height=42;miniDraw(mini,L);
     mini.style.cursor='pointer';mini.onclick=()=>{sel=i;draw();buildList();};
     const tag=document.createElement('span');tag.className='ptag '+L.type;tag.textContent=TYPE[L.type];
     const nm=document.createElement('div');nm.className='nm';nm.textContent=(L.name||TYPE[L.type])+(L.busy?' ⏳':'');
+    const lock=document.createElement('button');lock.className='lock'+(L.locked?' on':'');lock.textContent=L.locked?'🔒':'🔓';
+    lock.title=L.locked?'已鎖定（點擊解鎖）':'鎖定圖層（防止移動／縮放／裁切）';
+    lock.onclick=()=>{L.locked=!L.locked;draw();buildList();};
     const del=document.createElement('button');del.className='del';del.textContent='✕';del.onclick=()=>remove(i);
-    top.append(mini,tag,nm,del);card.append(top);
+    top.append(mini,tag,nm,lock,del);card.append(top);
 
     // 影像：去背 + 強度
     if(L.type==='product'||L.type==='logo'){
@@ -274,6 +293,12 @@ function buildList(){
       let stmr;si.oninput=()=>{L.tol=+si.value;sv.textContent=L.tol;sel=i;clearTimeout(stmr);
         stmr=setTimeout(()=>{L.pc=floodFill(L.base,L.tol);miniDraw(mini,L);draw();},80);};
       r2.append(sl,si,sv);card.append(r2);
+      if(L.crop){const rc=document.createElement('div');rc.className='prow';
+        const rcl=document.createElement('span');rcl.className='pl';rcl.textContent='裁切';
+        const rcv=document.createElement('span');rcv.className='pv';rcv.textContent=Math.round(L.crop.w)+'×'+Math.round(L.crop.h);
+        const rcb=document.createElement('button');rcb.className='minibtn';rcb.textContent='還原';
+        rcb.onclick=()=>{delete L.crop;sel=i;draw();buildList();};
+        rc.append(rcl,rcv,rcb);card.append(rc);}
     }
     // 文字：內容 + 顏色 + 粗細
     if(L.type==='text'){
@@ -362,15 +387,44 @@ cv.addEventListener('drop',e=>{e.preventDefault();[...e.dataTransfer.files].filt
 
 /* ---------- 畫布互動 ---------- */
 function pt(e){const r=cv.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height};}
-function hit(p){for(let i=layers.length-1;i>=0;i--){const L=layers[i];const b=boxOf(L);
+function hit(p){for(let i=layers.length-1;i>=0;i--){const L=layers[i];if(L.locked)continue;const b=boxOf(L);
   if(p.x>=L.x-b.w/2&&p.x<=L.x+b.w/2&&p.y>=L.y-b.h/2&&p.y<=L.y+b.h/2)return i;}return -1;}
-let drag=false,off={x:0,y:0};
-cv.addEventListener('pointerdown',e=>{const p=pt(e),i=hit(p);sel=i;
-  if(i>=0){drag=true;cv.classList.add('drag');cv.setPointerCapture(e.pointerId);off={x:p.x-layers[i].x,y:p.y-layers[i].y};}
+let mode=null,off={x:0,y:0},rs=null; // mode: 'move' | 'resize' | 'crop'
+cv.addEventListener('pointerdown',e=>{const p=pt(e);
+  // 1) 先判斷是否抓到「已選圖層」的四角控制點 → 縮放 / 裁切
+  if(sel>=0&&!layers[sel].locked){const L=layers[sel];const h=hitHandle(L,p);
+    if(h){const b=boxOf(L);cv.setPointerCapture(e.pointerId);
+      rs={L,cx:h.cx,cy:h.cy,ax:L.x-h.cx*b.w/2,ay:L.y-h.cy*b.h/2,startW:b.w,startH:b.h,startScale:L.scale,startSize:L.size};
+      if(e.altKey&&isImg(L)){mode='crop';rs.startCrop={...cropOf(L)};rs.scale=L.scale;cv.style.cursor='crosshair';}
+      else{mode='resize';cv.style.cursor=(h.cx*h.cy>0)?'nwse-resize':'nesw-resize';}
+      draw();return;}}
+  // 2) 否則點選 / 拖曳移動
+  const i=hit(p);sel=i;
+  if(i>=0){mode='move';cv.setPointerCapture(e.pointerId);off={x:p.x-layers[i].x,y:p.y-layers[i].y};cv.style.cursor='grabbing';}
+  else{mode=null;cv.style.cursor='grab';}
   draw();buildList();});
-cv.addEventListener('pointermove',e=>{if(!drag||sel<0)return;const p=pt(e);layers[sel].x=p.x-off.x;layers[sel].y=p.y-off.y;draw();updateCoord(layers[sel]);});
-cv.addEventListener('pointerup',()=>{drag=false;cv.classList.remove('drag');});
-cv.addEventListener('wheel',e=>{if(sel<0)return;e.preventDefault();const L=layers[sel];
+cv.addEventListener('pointermove',e=>{const p=pt(e);
+  // 沒有在操作時：依滑鼠位置切換游標提示
+  if(!mode){let cur='grab';
+    if(sel>=0&&!layers[sel].locked){const h=hitHandle(layers[sel],p);
+      if(h)cur=(e.altKey&&isImg(layers[sel]))?'crosshair':((h.cx*h.cy>0)?'nwse-resize':'nesw-resize');}
+    cv.style.cursor=cur;return;}
+  if(mode==='move'&&sel>=0){const L=layers[sel];L.x=p.x-off.x;L.y=p.y-off.y;draw();updateCoord(L);return;}
+  if(mode==='resize'&&rs){const L=rs.L;
+    const dw=Math.abs(p.x-rs.ax),dh=Math.abs(p.y-rs.ay);
+    const ratio=Math.max(dw/rs.startW,dh/rs.startH,0.04);
+    if(isImg(L))L.scale=rs.startScale*ratio;else L.size=clamp(Math.round(rs.startSize*ratio),12,400);
+    const nb=boxOf(L);L.x=rs.ax+rs.cx*nb.w/2;L.y=rs.ay+rs.cy*nb.h/2;draw();updateCoord(L);return;}
+  if(mode==='crop'&&rs){const L=rs.L,sc=rs.startCrop,s=rs.scale;
+    // 把指標位置換算回原圖像素，固定對角，移動被拖的那一角
+    const aSrcX=rs.cx>0?sc.x:sc.x+sc.w;let dx=clamp(aSrcX+(p.x-rs.ax)/s,0,L.bw);
+    let left,right;if(rs.cx>0){left=sc.x;right=Math.max(dx,left+10);}else{right=sc.x+sc.w;left=Math.min(dx,right-10);}
+    const aSrcY=rs.cy>0?sc.y:sc.y+sc.h;let dy=clamp(aSrcY+(p.y-rs.ay)/s,0,L.bh);
+    let top,bottom;if(rs.cy>0){top=sc.y;bottom=Math.max(dy,top+10);}else{bottom=sc.y+sc.h;top=Math.min(dy,bottom-10);}
+    L.crop={x:left,y:top,w:right-left,h:bottom-top};
+    const nb=boxOf(L);L.x=rs.ax+rs.cx*nb.w/2;L.y=rs.ay+rs.cy*nb.h/2;draw();updateCoord(L);return;}});
+cv.addEventListener('pointerup',()=>{const wasResize=(mode==='resize'||mode==='crop');mode=null;rs=null;cv.style.cursor='grab';if(wasResize)buildList();});
+cv.addEventListener('wheel',e=>{if(sel<0||layers[sel].locked)return;e.preventDefault();const L=layers[sel];
   if(L.type==='text'||L.type==='badge')L.size=Math.max(16,L.size*(e.deltaY<0?1.06:0.94));else L.scale*=e.deltaY<0?1.06:0.94;
   draw();buildList();},{passive:false});
 
@@ -380,12 +434,23 @@ document.querySelectorAll('#bgSeg button').forEach(b=>b.onclick=()=>{
 document.getElementById('bgColor').addEventListener('input',e=>{bg=e.target.value;
   document.querySelectorAll('#bgSeg button').forEach(x=>x.classList.remove('on'));draw();});
 document.getElementById('shadow').addEventListener('change',e=>{shadow=e.target.checked;draw();});
-document.getElementById('dl').onclick=()=>{
+function exportImage(mime,ext){
   if(layers.some(L=>L.busy)){alert('還在 AI 去背處理中，請等一下再下載');return;}
   exporting=true;draw();
-  let name=(document.getElementById('fn').value||'').trim().replace(/[\\/:*?"<>|]/g,'_').replace(/\.png$/i,'');
+  let name=(document.getElementById('fn').value||'').trim().replace(/[\\/:*?"<>|]/g,'_').replace(/\.(png|jpe?g)$/i,'');
   if(!name)name='組合圖_1000x1000';
-  const a=document.createElement('a');a.download=name+'.png';a.href=cv.toDataURL('image/png');a.click();exporting=false;draw();};
+  let url;
+  if(mime==='image/jpeg'){
+    // JPG 不支援透明，先把畫布合成到白底再輸出，避免透明區變黑
+    const tmp=document.createElement('canvas');tmp.width=W;tmp.height=H;
+    const tx=tmp.getContext('2d');tx.fillStyle='#ffffff';tx.fillRect(0,0,W,H);tx.drawImage(cv,0,0);
+    url=tmp.toDataURL('image/jpeg',0.95);
+  }else{
+    url=cv.toDataURL('image/png');
+  }
+  const a=document.createElement('a');a.download=name+'.'+ext;a.href=url;a.click();exporting=false;draw();}
+document.getElementById('dl').onclick=()=>exportImage('image/png','png');
+document.getElementById('dlJpg').onclick=()=>exportImage('image/jpeg','jpg');
 
 /* ---------- 賣場樣板 ---------- */
 const TKEY='combo_templates_v1';
@@ -407,9 +472,9 @@ function refreshTplUI(){
 // 序列化「非商品」圖層成樣板
 function serializeDeco(){
   return layers.filter(L=>L.type!=='product').map(L=>{
-    if(L.type==='logo')return{type:'logo',dataUrl:L.base.toDataURL('image/png'),x:L.x,y:L.y,scale:L.scale,bw:L.bw,bh:L.bh,rm:L.rm,tol:L.tol,name:L.name};
-    if(L.type==='text')return{type:'text',text:L.text,size:L.size,color:L.color,weight:L.weight,x:L.x,y:L.y};
-    if(L.type==='badge')return{type:'badge',text:L.text,size:L.size,color:L.color,x:L.x,y:L.y};
+    if(L.type==='logo')return{type:'logo',dataUrl:L.base.toDataURL('image/png'),x:L.x,y:L.y,scale:L.scale,bw:L.bw,bh:L.bh,rm:L.rm,tol:L.tol,name:L.name,crop:L.crop||null,locked:L.locked||false};
+    if(L.type==='text')return{type:'text',text:L.text,size:L.size,color:L.color,weight:L.weight,x:L.x,y:L.y,locked:L.locked||false};
+    if(L.type==='badge')return{type:'badge',text:L.text,size:L.size,color:L.color,x:L.x,y:L.y,locked:L.locked||false};
   });
 }
 function applyTemplate(t){
@@ -420,9 +485,11 @@ function applyTemplate(t){
       const L={id:++_id,type:'logo',base,pc:srcCanvas(base),scale:it.scale,bw:it.bw||base.width,bh:it.bh||base.height,
         box:{w:(it.bw||base.width)*it.scale,h:(it.bh||base.height)*it.scale},name:it.name||'LOGO',busy:false,rm:it.rm||'fast',tol:it.tol||0,x:it.x,y:it.y};
       if((it.rm||'fast')!=='off'&&(it.rm)!=='fast'){}else if(it.rm==='fast'&&it.tol){L.pc=floodFill(base,it.tol);}
+      if(it.crop)L.crop=it.crop;
+      if(it.locked)L.locked=true;
       layers.push(L);draw();buildList();};im.src=it.dataUrl;}
-    else if(it.type==='text'){layers.push({id:++_id,type:'text',name:'標題',text:it.text,size:it.size,color:it.color,weight:it.weight,x:it.x,y:it.y});}
-    else if(it.type==='badge'){layers.push({id:++_id,type:'badge',name:'紅標',text:it.text,size:it.size,color:it.color,x:it.x,y:it.y});}
+    else if(it.type==='text'){layers.push({id:++_id,type:'text',name:'標題',text:it.text,size:it.size,color:it.color,weight:it.weight,x:it.x,y:it.y,locked:!!it.locked});}
+    else if(it.type==='badge'){layers.push({id:++_id,type:'badge',name:'紅標',text:it.text,size:it.size,color:it.color,x:it.x,y:it.y,locked:!!it.locked});}
   });
   sel=-1;draw();buildList();
 }
